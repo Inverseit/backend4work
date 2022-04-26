@@ -53,32 +53,15 @@ const getLoginProxyBody = async (
     return: retValue,
   };
   body[tokenKey] = 1;
-  return { body, cookie };
+  const formatted = cookie.slice(0, cookie.length - 8);
+  return { body, cookie: formatted };
 };
 
 const getLoginCookie = async (
   body: LoginProxyBody,
   cookie: string
 ): Promise<string> => {
-  console.log("getLoginCookie");
-  // const options: AxiosRequestConfig = {
-  //   headers: {
-  //     "accept-language": "en",
-  //     "cache-control": "max-age=0",
-  //     "content-type": "application/x-www-form-urlencoded",
-  //     "upgrade-insecure-requests": "1",
-  //     cookie: cookie,
-  //   },
-  //   method: "POST",
-  //   maxRedirects: 0,
-  // };
-  // console.log("sending request", options);
   try {
-    // const res: AxiosResponse = await axios.post(
-    //   "https://www.tech4work.com/index.php",
-    //   qs.stringify(body),
-    //   options
-    // );
     const res = await fetch("https://www.tech4work.com/index.php", {
       method: "POST",
       body: qs.stringify(body),
@@ -89,17 +72,36 @@ const getLoginCookie = async (
         "upgrade-insecure-requests": "1",
         cookie: cookie,
       },
-      redirect: 'manual', 
+      redirect: "manual",
     });
     console.log(res.bodyUsed, res.bodyUsed, res.status);
     if (res && res.headers && res.headers.raw()) {
       const cookie2 = res.headers.raw()["set-cookie"][0];
-      return cookie2;
+      return cookie2.slice(0, cookie2.length - 8);
     }
   } catch (error) {
     console.log(error);
   }
   throw new Error("No cookie found :(");
+};
+
+const getId = async (cookie: string): Promise<string> => {
+  const res = await axios.get(
+    "https://www.tech4work.com/index.php?option=com_content&view=article&id=50&Itemid=74",
+    {
+      headers: {
+        cookie: cookie,
+      },
+    }
+  );
+
+  const iframe: HTMLElement | null = parse(res.data).querySelector("iframe");
+  if (iframe) {
+    const iframeAttr = iframe.rawAttrs;
+    const deletedPrefix = iframeAttr.slice(33);
+    return deletedPrefix.slice(0, deletedPrefix.indexOf('"'));
+  }
+  throw new Error("Iframe not found!");
 };
 
 export default async function loginController(fastify: FastifyInstance) {
@@ -112,20 +114,10 @@ export default async function loginController(fastify: FastifyInstance) {
     ) => {
       const { username, password } = request.body;
       const { body, cookie } = await getLoginProxyBody(username, password);
-      const formatted = cookie.slice(0, cookie.length - 8);
-      const newcookieRaw = await getLoginCookie(body, formatted);
-      const newcookie = newcookieRaw.slice(0, cookie.length - 8)
-      // reply.send(newcookie);
-
-      console.log("llooool");
-
-      const res = await axios.get("https://www.tech4work.com/studentemp/index.asp?uid=7371", {
-        headers: {
-          cookie: newcookie
-        }
-      })
-      // console.log(res.data);
-      reply.type('text/html').send(res.data);
+      const sessionCookie = await getLoginCookie(body, cookie);
+      const id = await getId(sessionCookie);
+      reply.send(id);
+      // https://www.tech4work.com/studentemp/index.asp?uid=7371
     }
   );
 }
