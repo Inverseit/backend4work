@@ -74,7 +74,6 @@ const getLoginCookie = async (
       },
       redirect: "manual",
     });
-    console.log(res.bodyUsed, res.bodyUsed, res.status);
     if (res && res.headers && res.headers.raw()) {
       const cookie2 = res.headers.raw()["set-cookie"][0];
       return cookie2.slice(0, cookie2.length - 8);
@@ -116,8 +115,7 @@ export default async function loginController(fastify: FastifyInstance) {
       const { body, cookie } = await getLoginProxyBody(username, password);
       const sessionCookie = await getLoginCookie(body, cookie);
       const id = await getId(sessionCookie);
-      reply.send(id);
-      // https://www.tech4work.com/studentemp/index.asp?uid=7371
+      reply.header("set-cookie", sessionCookie).status(200).send({ id });
     }
   );
 }
