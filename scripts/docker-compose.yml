@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - ./parser/.env
+    ports:
+      - 15432:15432
+    command: -p 15432
+
+  script:
+    build:
+      context: ./parser
+      dockerfile: Dockerfile
+    env_file:
+      - ./parser/.env
+    depends_on:
+      - db
+    command: yarn start
+
+volumes:
+    postgres_data:

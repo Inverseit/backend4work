@@ -2,3 +2,5 @@ dist
 node_modules
 .vscode
 test.txt
+data.csv
+scripts/test/data.txt
