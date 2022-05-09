@@ -9,6 +9,7 @@
   "dependencies": {
     "axios": "^0.27.2",
     "fast-html-parser": "^1.0.1",
+    "fs": "^0.0.1-security",
     "pg": "^8.7.3"
   }
 }

@@ -25,6 +25,7 @@ const createUsers = `
 let successCount = 0;
 let axiosError = [];
 let dbError = [];
+let already = 0;
 
 const insertEntryQuery =
   "INSERT INTO entries_new(id, project_id, created_by, hours, worked, created, notes) VALUES($1, $2, $3, $4, $5, $6, $7)";
@@ -47,7 +48,7 @@ const parseRawHTML = (id, html) => {
   const nameEndIndex = removed.indexOf("</td>");
   const name = removed.slice(nameStartIndex, nameEndIndex);
   return [id, name, notes];
-}
+};
 
 const writeToDB = async (db, data, id) => {
   try {
@@ -58,37 +59,63 @@ const writeToDB = async (db, data, id) => {
     console.log("Got db error " + id);
     dbError.push([id, data]);
   }
-}
+};
+
+const alreadyExists = async (db, id) => {
+  const res = await db.query("SELECT id from users_test where id=$1", [id]);
+  return res.rowCount !== 0;
+};
 
 const getUserData = async (db, id) => {
   try {
-    console.log("Sending " + id);
-    const res = await axios.get("https://www.tech4work.com/studentemp/index.asp", {
-      params: {uid: id}
-    })
-    const html = res.data;
-    const data = parseRawHTML(id, html);
-    await writeToDB(db, data, id);
+    const exists = await alreadyExists(db, id);
+    if (!exists) {
+      console.log("Sending " + id);
+      const res = await axios.get(
+        "https://www.tech4work.com/studentemp/index.asp",
+        {
+          params: { uid: id },
+        }
+      );
+      const html = res.data;
+      const data = parseRawHTML(id, html);
+      await writeToDB(db, data, id);
+    } else {
+        console.log("Already" + id);
+        already ++;
+    }
   } catch (error) {
     console.log("Got axios error " + id);
     axiosError.push([id, error]);
   }
-}
+};
 
 const main = async () => {
   const db = await init();
   await db.query(createUsers);
-  const res = await db.query("SELECT DISTINCT created_by FROM entries_new ORDER BY created_by");
+  const res = await db.query(
+    "SELECT DISTINCT created_by FROM entries_new ORDER BY created_by"
+  );
   const total = res.rowCount;
-  const users = res.rows.map(row => row.created_by);
+  const users = res.rows.map((row) => row.created_by);
   console.log("Going to do " + total);
-  await Promise.allSettled(users.map(id => getUserData(db, id)));
+  await Promise.allSettled(users.map((id) => getUserData(db, id)));
   console.log("Done everything");
   console.log(
     `Success : ${successCount} (${
       (successCount * 100) / total
-    }%). Axios Error: ${axiosError.length}. Db Error: ${dbError.length}.`
+    }%). Axios Error: ${axiosError.length}. Db Error: ${dbError.length}. Already: ${already}.`
   );
+  console.log(axiosError.map(e => e[0]));
 };
 
-main();
+const all_trials = async () => {
+    const n = 5;
+    for (let index = 0; index < n; index++) {
+        await main();
+        console.log("Done " + i + 1 + " / " + n + " times");
+    }
+}
+
+
+all_trials();

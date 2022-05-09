@@ -125,6 +125,7 @@ const main = async () => {
       (successCount * 100) / total
     }%). Axios Error: ${axiosCount}. Db Error: ${dbCount}. Already: ${already}`
   );
+  console.log(axiosError.map(e => e[0]));
 };
 
 main();
