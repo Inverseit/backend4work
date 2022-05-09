@@ -113,10 +113,14 @@ export default async function loginController(fastify: FastifyInstance) {
     ) => {
       try {
         const { username, password } = request.body;
+        console.log("step 1");
         const { body, cookie } = await getLoginProxyBody(username, password);
+        console.log("step 2");
         const sessionCookie = await getLoginCookie(body, cookie);
+        console.log("step 3");
         const id = await getId(sessionCookie);
-        reply.header("set-cookie", sessionCookie).status(200).send({ id });
+        console.log("step 4");
+        reply.header("set-cookie", sessionCookie).status(200).send({ id, cookie: sessionCookie });
       } catch (error) {
         reply.status(400).send({ message: "Wrong credentials" });
       }

@@ -234,11 +234,14 @@ export default async function userController(fastify: FastifyInstance) {
     "/jobs",
     async function (_request: JobsRequest, reply: FastifyReply) {
       const user_id: string = _request.query.user_id;
-      if (!_request.headers.cookie) {
+      if (
+        !_request.headers["x-cookie-token"] ||
+        Array.isArray(_request.headers["x-cookie-token"])
+      ) {
         unauthorized(reply);
         return;
       }
-      const cookie: string = _request.headers.cookie;
+      const cookie: string = _request.headers["x-cookie-token"];
       const res = await getJobs(user_id, cookie);
       reply.send(res);
     }
