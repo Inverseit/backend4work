@@ -91,15 +91,43 @@ const getAllEntries = async (
   console.log(entries, totalEntries);
 
   const getDataFromChild = (child: HTMLElement[]): JobTimeEntry => {
-    const tid = child[1].childNodes[0].childNodes[0].rawText;
-    const jid = child[3].childNodes[0].rawText;
-    const uid = child[5].childNodes[0].rawText;
-    const hours = child[7].childNodes[0].rawText;
-    const worked = child[9].childNodes[0].rawText;
-    const entered = child[9].childNodes[0].rawText;
-    const notes = child[11].childNodes[0].rawText;
-    const data: JobTimeEntry = { tid, jid, uid, hours, worked, entered, notes };
-    return data;
+    try {
+      const readOrEmpty = (index: number) => {
+        if (child[index]?.childNodes[0]?.rawText === undefined) {
+          return "";
+        }
+        return child[index].childNodes[0].rawText;
+      };
+
+      const tid = child[1].childNodes[0].childNodes[0].rawText;
+      const jid = child[3].childNodes[0].rawText;
+      const uid = child[5].childNodes[0].rawText;
+      const hours = child[7].childNodes[0].rawText;
+      const worked = child[9].childNodes[0].rawText;
+      const entered = child[11].childNodes[0].rawText;
+      const notes = readOrEmpty(13);
+      const data: JobTimeEntry = {
+        tid,
+        jid,
+        uid,
+        hours,
+        worked,
+        entered,
+        notes,
+      };
+      return data;
+    } catch (error) {
+      console.log(error);
+      return {
+        tid: "",
+        jid: "",
+        uid: "",
+        hours: "",
+        worked: "",
+        entered: "",
+        notes: "",
+      };
+    }
   };
 
   const getEntriesPerPage = (html: string) => {
@@ -159,7 +187,7 @@ const getHours = async (userID: string, jobID: string, cookie: string) => {
   const totalEntries = getTotalEntries(html);
   const allEntries = await getAllEntries(userID, jobID, totalEntries, cookie);
   console.log(aspCookie, allEntries);
-  return allEntries;
+  return { n: allEntries.length, entries: allEntries };
 };
 
 // Promise<Job[]>
