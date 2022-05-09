@@ -23,6 +23,9 @@ const createEntries = `
 //     );`;
 
 let successCount = 0;
+let already = 0;
+let axiosCount = 0;
+let dbCount = 0;
 let axiosError = [];
 let dbError = [];
 
@@ -37,11 +40,91 @@ const init = async () => {
   return client;
 };
 
+const parseData = (html) => {
+  const parsed = parse(html);
+  const table = parsed
+    .querySelector("table")
+    .childNodes.filter(
+      (row) => row.tagName === "tr" && row.childNodes.length == 5
+    );
+
+  const textNodes = table.map((elem) => elem.childNodes[3].childNodes[0]);
+  const filtered = textNodes.filter((elem) => elem !== undefined);
+  const rawData = filtered.map((elem) => elem.rawText);
+  return {
+    tid: parseInt(rawData[0]),
+    project_id: parseInt(rawData[1]),
+    user_id: parseInt(rawData[2]),
+    hours: rawData[3],
+    worked: rawData[4],
+    created: rawData[5],
+    notes: rawData[6] ? rawData[6] : "",
+  };
+};
+
+const alreadyExists = async (db, tid) => {
+  const res = await db.query("SELECT id from entries_new where id=$1", [tid]);
+  return res.rowCount !== 0;
+} 
+
+// https://tech4work.com/studentemp/index.asp?uid=
+const getEntry = async (db, tid) => {
+  try {
+    const exists = await alreadyExists(db, tid);
+    if (!exists) {
+      console.log("Starting " + tid);
+      const res = await axios.get(
+        `https://www.tech4work.com/studentemp/job_timesheet_detail.asp`,
+        {
+          params: { tid },
+        }
+      );
+      const data = parseData(res.data);
+      await writeEntry(tid, data, db);
+    } else {
+      already++;
+      console.log(`${tid} already exists`);
+    }
+  } catch (error) {
+    axiosCount++;
+  }
+};
+
+const writeEntry = async (id, data, db) => {
+  if (data) {
+    try {
+      let { tid, project_id, user_id, hours, worked, created, notes } = data;
+      await db.query(insertEntryQuery, [
+        tid,
+        project_id,
+        user_id,
+        hours,
+        worked,
+        created,
+        notes,
+      ]);
+      successCount++;
+      console.log(successCount, id);
+    } catch (error) {
+      dbCount++;
+    }
+  }
+};
+
 const main = async () => {
   const db = await init();
-  const res = await db.query("SELECT DISTINCT created_by FROM entries_new ORDER BY created_by");
-  console.log(res.rowCount);
-  console.log(res.rows.map(row => row.created_by));
+  const startID = 323565;
+  const total = 5000;
+  const allRequests = [...Array(total).keys()].map((i) =>
+    getEntry(db, startID + i)
+  );
+  await Promise.allSettled(allRequests);
+  console.log("Done");
+  console.log(
+    `Success : ${successCount} (${
+      (successCount * 100) / total
+    }%). Axios Error: ${axiosCount}. Db Error: ${dbCount}. Already: ${already}`
+  );
 };
 
 main();

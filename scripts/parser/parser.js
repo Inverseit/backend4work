@@ -23,6 +23,9 @@ const createEntries = `
 //     );`;
 
 let successCount = 0;
+let already = 0;
+let axiosCount = 0;
+let dbCount = 0;
 let axiosError = [];
 let dbError = [];
 
@@ -59,21 +62,31 @@ const parseData = (html) => {
   };
 };
 
+const alreadyExists = async (db, tid) => {
+  const res = await db.query("SELECT id from entries_new where id=$1", [tid]);
+  return res.rowCount !== 0;
+} 
+
 // https://tech4work.com/studentemp/index.asp?uid=
 const getEntry = async (db, tid) => {
   try {
-    console.log("Starting " + tid);
-    const res = await axios.get(
-      `https://www.tech4work.com/studentemp/job_timesheet_detail.asp`,
-      {
-        params: { tid },
-      }
-    );
-    const data = parseData(res.data);
-    await writeEntry(tid, data, db);
+    const exists = await alreadyExists(db, tid);
+    if (!exists) {
+      console.log("Starting " + tid);
+      const res = await axios.get(
+        `https://www.tech4work.com/studentemp/job_timesheet_detail.asp`,
+        {
+          params: { tid },
+        }
+      );
+      const data = parseData(res.data);
+      await writeEntry(tid, data, db);
+    } else {
+      already++;
+      console.log(`${tid} already exists`);
+    }
   } catch (error) {
-    console.log("axios error", tid);
-    axiosError.append([tid, error]);
+    axiosCount++;
   }
 };
 
@@ -93,15 +106,14 @@ const writeEntry = async (id, data, db) => {
       successCount++;
       console.log(successCount, id);
     } catch (error) {
-      console.log("db error", tid);
-      dbError.append([id, error]);
+      dbCount++;
     }
   }
 };
 
 const main = async () => {
   const db = await init();
-  const startID = 324565;
+  const startID = 323565;
   const total = 5000;
   const allRequests = [...Array(total).keys()].map((i) =>
     getEntry(db, startID + i)
@@ -111,7 +123,7 @@ const main = async () => {
   console.log(
     `Success : ${successCount} (${
       (successCount * 100) / total
-    }%). Axios Error: ${axiosError.length}. Db Error: ${dbError.length} `
+    }%). Axios Error: ${axiosCount}. Db Error: ${dbCount}. Already: ${already}`
   );
 };
 
