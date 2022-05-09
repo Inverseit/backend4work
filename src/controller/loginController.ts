@@ -111,11 +111,15 @@ export default async function loginController(fastify: FastifyInstance) {
       request: FastifyRequest<{ Body: LoginBody }>,
       reply: FastifyReply
     ) => {
-      const { username, password } = request.body;
-      const { body, cookie } = await getLoginProxyBody(username, password);
-      const sessionCookie = await getLoginCookie(body, cookie);
-      const id = await getId(sessionCookie);
-      reply.header("set-cookie", sessionCookie).status(200).send({ id });
+      try {
+        const { username, password } = request.body;
+        const { body, cookie } = await getLoginProxyBody(username, password);
+        const sessionCookie = await getLoginCookie(body, cookie);
+        const id = await getId(sessionCookie);
+        reply.header("set-cookie", sessionCookie).status(200).send({ id });
+      } catch (error) {
+        reply.status(400).send({ message: "Wrong credentials" });
+      }
     }
   );
 }
