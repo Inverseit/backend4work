@@ -23,6 +23,16 @@ type Job = {
   };
 };
 
+type JobTimeEntry = {
+  tid: string;
+  jid: string;
+  uid: string;
+  hours: string;
+  worked: string;
+  entered: string;
+  notes: string;
+};
+
 const unauthorized = (reply: FastifyReply) => {
   return reply.code(401).send("Not allowed to see this");
 };
@@ -71,7 +81,67 @@ const getTotalEntries = (html: string): number => {
   return num;
 };
 
+const getAllEntries = async (
+  userID: string,
+  jobID: string,
+  totalEntries: number,
+  cookie: string
+) => {
+  const entries: JobTimeEntry[] = [];
+  console.log(entries, totalEntries);
+
+  const getDataFromChild = (child: HTMLElement[]): JobTimeEntry => {
+    const tid = child[1].childNodes[0].childNodes[0].rawText;
+    const jid = child[3].childNodes[0].rawText;
+    const uid = child[5].childNodes[0].rawText;
+    const hours = child[7].childNodes[0].rawText;
+    const worked = child[9].childNodes[0].rawText;
+    const entered = child[9].childNodes[0].rawText;
+    const notes = child[11].childNodes[0].rawText;
+    const data: JobTimeEntry = { tid, jid, uid, hours, worked, entered, notes };
+    return data;
+  };
+
+  const getEntriesPerPage = (html: string) => {
+    const table = parse(html).querySelector("table")?.childNodes;
+    if (!table) return [];
+    const onlyRows = table.filter(
+      (elem) => elem.tagName === "tr" && elem.rawAttrs === ""
+    );
+    const children = onlyRows.map((elem) => elem.childNodes);
+    const data = children.map(getDataFromChild);
+    return data;
+  };
+
+  const getPage = async (offset: number) => {
+    try {
+      console.log("Getting an offset: " + offset);
+      const res = await axios.get(
+        "https://www.tech4work.com/studentemp/job_timesheet.asp",
+        {
+          params: { uid: userID, jid: jobID, offset: offset },
+          headers: {
+            cookie,
+          },
+        }
+      );
+      entries.push(...getEntriesPerPage(res.data));
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const offsets = [...Array(1 + Math.floor(totalEntries / 10)).keys()];
+  const allRequests = offsets.map((i) => {
+    return getPage(i * 10);
+  });
+
+  await Promise.allSettled(allRequests);
+  return entries;
+};
+
 const getHours = async (userID: string, jobID: string, cookie: string) => {
+  console.log("Got request");
   const res = await axios.get(
     "https://www.tech4work.com/studentemp/job_timesheet.asp",
     {
@@ -87,7 +157,9 @@ const getHours = async (userID: string, jobID: string, cookie: string) => {
   const aspCookie: string = res.headers["set-cookie"][0];
   const html: string = res.data;
   const totalEntries = getTotalEntries(html);
-  console.log(aspCookie, totalEntries);
+  const allEntries = await getAllEntries(userID, jobID, totalEntries, cookie);
+  console.log(aspCookie, allEntries);
+  return allEntries;
 };
 
 // Promise<Job[]>
