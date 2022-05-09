@@ -12,6 +12,7 @@
   "author": "Matschik <mathieu.schimmerling@protonmail.com>",
   "license": "MIT",
   "dependencies": {
+    "@fastify/cors": "^7.0.0",
     "@types/fast-html-parser": "^1.0.2",
     "@types/node-fetch": "^2.6.1",
     "@types/qs": "^6.9.7",
