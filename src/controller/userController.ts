@@ -168,8 +168,15 @@ const getAllEntries = async (
   return entries;
 };
 
+const hoursCache : any = {
+}
+
 const getHours = async (userID: string, jobID: string, cookie: string) => {
   console.log("Got request");
+  const cacheKey = userID + "/" + jobID;
+  if (cacheKey in hoursCache){
+    return hoursCache[cacheKey];
+  }
   const res = await axios.get(
     "https://www.tech4work.com/studentemp/job_timesheet.asp",
     {
@@ -182,12 +189,21 @@ const getHours = async (userID: string, jobID: string, cookie: string) => {
   if (!res.headers["set-cookie"]) {
     throw new Error("No cookie");
   }
-  const aspCookie: string = res.headers["set-cookie"][0];
-  const html: string = res.data;
-  const totalEntries = getTotalEntries(html);
-  const allEntries = await getAllEntries(userID, jobID, totalEntries, cookie);
-  console.log(aspCookie, allEntries);
-  return { n: allEntries.length, entries: allEntries };
+  try {
+    const aspCookie: string = res.headers["set-cookie"][0];
+    const html: string = res.data;
+    const totalEntries = getTotalEntries(html);
+    console.log(totalEntries);
+    const allEntries = await getAllEntries(userID, jobID, totalEntries, cookie);
+    console.log(aspCookie, allEntries);
+    const response =  { n: allEntries.length, entries: allEntries };
+    hoursCache[cacheKey] = response;
+    return response;
+  } catch (error) {
+    console.log(error);
+    throw error;
+  }
+
 };
 
 // Promise<Job[]>
@@ -213,19 +229,27 @@ const getJobs = async (id: string, cookie: string) => {
 };
 
 export default async function userController(fastify: FastifyInstance) {
-  // GET /user/jobs?id=${id}
+  // GET /user/hours?id=${id}
   fastify.get(
     "/hours",
     async function (_request: HoursRequest, reply: FastifyReply) {
       const userID: string = _request.query.user_id;
       const jobID: string = _request.query.job_id;
-      if (!_request.headers.cookie) {
+      if (
+        !_request.headers["x-cookie-token"] ||
+        Array.isArray(_request.headers["x-cookie-token"])
+      ) {
         unauthorized(reply);
         return;
       }
-      const cookie: string = _request.headers.cookie;
-      const res = await getHours(userID, jobID, cookie);
-      reply.send(res);
+      try {
+        const cookie: string = _request.headers["x-cookie-token"];
+        const res = await getHours(userID, jobID, cookie);
+        reply.send(res);
+      } catch (error) {
+        console.log(error);
+        throw error;
+      }
     }
   );
 

@@ -80,6 +80,7 @@ const getLoginCookie = async (
     }
   } catch (error) {
     console.log(error);
+    throw new Error("No cookie found :(");
   }
   throw new Error("No cookie found :(");
 };
@@ -103,6 +104,9 @@ const getId = async (cookie: string): Promise<string> => {
   throw new Error("Iframe not found!");
 };
 
+const cache : any = {
+}
+
 export default async function loginController(fastify: FastifyInstance) {
   // POST /
   fastify.post(
@@ -113,6 +117,13 @@ export default async function loginController(fastify: FastifyInstance) {
     ) => {
       try {
         const { username, password } = request.body;
+        if (username in cache){
+          const {id, sessionCookie} = cache[username]; 
+          reply
+          .header("set-cookie", sessionCookie)
+          .status(200)
+          .send({ id, cookie: sessionCookie });
+        }
         console.log("step 1");
         const { body, cookie } = await getLoginProxyBody(username, password);
         console.log("step 2");
@@ -120,7 +131,13 @@ export default async function loginController(fastify: FastifyInstance) {
         console.log("step 3");
         const id = await getId(sessionCookie);
         console.log("step 4");
-        reply.header("set-cookie", sessionCookie).status(200).send({ id, cookie: sessionCookie });
+        cache[username] = {
+          id, sessionCookie
+        }
+        reply
+          .header("set-cookie", sessionCookie)
+          .status(200)
+          .send({ id, cookie: sessionCookie });
       } catch (error) {
         reply.status(400).send({ message: "Wrong credentials" });
       }
