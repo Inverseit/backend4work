@@ -13,15 +13,20 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/cors": "^7.0.0",
+    "@fastify/redis": "^5.0.0",
     "@types/fast-html-parser": "^1.0.2",
     "@types/node-fetch": "^2.6.1",
+    "@types/pg": "^8.6.5",
     "@types/qs": "^6.9.7",
+    "@types/redis": "^4.0.11",
     "axios": "^0.27.0",
     "fast-html-parser": "^1.0.1",
     "fastify": "^3.28.0",
     "node-fetch": "2",
+    "pg": "^8.7.3",
     "pino": "^7.10.0",
-    "qs": "^6.10.3"
+    "qs": "^6.10.3",
+    "redis": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "latest",

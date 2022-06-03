@@ -1,10 +1,10 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import axios from "axios";
-// AxiosResponse
-// import { AxiosRequestConfig } from "axios";
 import { parse, HTMLElement } from "fast-html-parser";
 import qs from "qs";
 import fetch from "node-fetch";
+import { createKey } from "../helpers";
+import { RedisClientType } from "@redis/client";
 
 interface LoginBody {
   username: string;
@@ -104,9 +104,6 @@ const getId = async (cookie: string): Promise<string> => {
   throw new Error("Iframe not found!");
 };
 
-const cache : any = {
-}
-
 export default async function loginController(fastify: FastifyInstance) {
   // POST /
   fastify.post(
@@ -117,12 +114,18 @@ export default async function loginController(fastify: FastifyInstance) {
     ) => {
       try {
         const { username, password } = request.body;
-        if (username in cache){
-          const {id, sessionCookie} = cache[username]; 
+        const { redisUntyped } = fastify;
+        const redis = redisUntyped as RedisClientType;
+        const key = createKey(username, password);
+        const cache_data_json = await redis.get(key);
+        if (cache_data_json != null) {
+          const cache_data = JSON.parse(cache_data_json);
+          const { id, sessionCookie } = cache_data;
           reply
-          .header("set-cookie", sessionCookie)
-          .status(200)
-          .send({ id, cookie: sessionCookie });
+            .header("set-cookie", sessionCookie)
+            .status(200)
+            .send({ id, cookie: sessionCookie });
+          return;
         }
         console.log("step 1");
         const { body, cookie } = await getLoginProxyBody(username, password);
@@ -131,14 +134,14 @@ export default async function loginController(fastify: FastifyInstance) {
         console.log("step 3");
         const id = await getId(sessionCookie);
         console.log("step 4");
-        cache[username] = {
-          id, sessionCookie
-        }
+        const data = { id, sessionCookie };
+        await redis.set(key, JSON.stringify(data));
         reply
           .header("set-cookie", sessionCookie)
           .status(200)
           .send({ id, cookie: sessionCookie });
       } catch (error) {
+        console.log(error);
         reply.status(400).send({ message: "Wrong credentials" });
       }
     }
