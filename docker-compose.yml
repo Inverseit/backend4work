@@ -1,0 +1,38 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:13-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    env_file:
+      - .env
+    ports:
+      - 15432:15432
+    command: -p 15432
+
+  cache:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+      - '6379:6379'
+    command: redis-server
+    volumes: 
+      - cache:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    depends_on:
+      - db
+      - cache
+    ports:
+      - "3011:3011"
+    command: yarn start
+
+volumes:
+    postgres_data:
+    cache:
+      driver: local
