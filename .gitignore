@@ -5,3 +5,4 @@ test.txt
 data.csv
 scripts/test/data.txt
 scripts/parser/logs.js
+.env
