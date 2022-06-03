@@ -4,7 +4,7 @@ const dbconnector = require('./database');
 
 declare module 'fastify' {
   interface FastifyInstance {
-    redisUntyped: any;
+    redis: any;
     pg: any;
   }
 }

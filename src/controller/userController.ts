@@ -1,37 +1,11 @@
 import axios from "axios";
 import { HTMLElement, parse } from "fast-html-parser";
-import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
-import { max } from "../helpers";
+import { FastifyInstance, FastifyReply } from "fastify";
+import { RedisClientType } from "redis";
+import { HoursRequest, Job, JobsRequest, JobTimeEntry } from "../types";
+import { createKeyHours, createKeyJobs, max } from "../helpers";
+import { backUpEntries, backUpJobs, getEntriesFromDb, getJobsFromDb } from "../data_helpers";
 
-type JobsRequest = FastifyRequest<{
-  Querystring: { user_id: string };
-}>;
-
-type HoursRequest = FastifyRequest<{
-  Querystring: { user_id: string; job_id: string };
-}>;
-
-type Job = {
-  jobID: string;
-  ref: string;
-  title: string;
-  superviser: string;
-  hours: {
-    thisMonth: number;
-    lastMonth: number;
-    total: number;
-  };
-};
-
-type JobTimeEntry = {
-  tid: string;
-  jid: string;
-  uid: string;
-  hours: string;
-  worked: string;
-  entered: string;
-  notes: string;
-};
 
 const unauthorized = (reply: FastifyReply) => {
   return reply.code(401).send("Not allowed to see this");
@@ -208,7 +182,6 @@ const getHours = async (userID: string, jobID: string, cookie: string) => {
 
 // Promise<Job[]>
 const getJobs = async (id: string, cookie: string) => {
-  console.log(id, cookie);
   const res = await axios.get(
     "https://www.tech4work.com/studentemp/index.asp",
     {
@@ -243,9 +216,22 @@ export default async function userController(fastify: FastifyInstance) {
         return;
       }
       try {
+
+        const { redis:redisUntyped } = fastify;
+        const redis = redisUntyped as RedisClientType;
+        const key = createKeyHours(jobID, userID);
+        const cache_entry = await redis.get(key);
+        if (cache_entry != null){
+          const dbResult = await getEntriesFromDb(userID, jobID, fastify.pg.client);
+          reply.send({ n: dbResult.length, entries: dbResult });
+          return;
+        }
         const cookie: string = _request.headers["x-cookie-token"];
         const res = await getHours(userID, jobID, cookie);
         reply.send(res);
+        await backUpEntries(res.entries, fastify.pg.client);
+        //@ts-ignore
+        await redis.set(key, "LOOK_FROM_DB", 'ex', 60 * 15);
       } catch (error) {
         console.log(error);
         throw error;
@@ -265,9 +251,25 @@ export default async function userController(fastify: FastifyInstance) {
         unauthorized(reply);
         return;
       }
+      const { redis:redisUntyped } = fastify;
+      const redis = redisUntyped as RedisClientType;
+      const key = createKeyJobs(user_id);
+      const cache_entry = await redis.get(key);
+      if (cache_entry != null){
+        const dbResult = await getJobsFromDb(user_id, fastify.pg.client);
+        reply.send({
+          id: user_id,
+          cookie: "NOT_NEEDED",
+          jobs: dbResult
+        });
+        return;
+      }
       const cookie: string = _request.headers["x-cookie-token"];
       const res = await getJobs(user_id, cookie);
       reply.send(res);
+      await backUpJobs(res.jobs,user_id, fastify.pg.client);
+      //@ts-ignore
+      await redis.set(key, "LOOK_FROM_DB", 'ex', 60 * 60 * 24);
     }
   );
 }

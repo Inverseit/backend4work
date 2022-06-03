@@ -61,8 +61,8 @@ async function dbconnector(fastify: FastifyInstance, options: any) {
     console.log("Creating jobs");
     await client.query(createEntryTable);
     console.log("Creating entries");
+    fastify.decorate("pg", { client });
     console.log("db connected succesfully");
-    fastify.decorate("db", { client });
   } catch (err) {
     console.error(err);
   }

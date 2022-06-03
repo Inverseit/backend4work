@@ -3,8 +3,9 @@ import axios from "axios";
 import { parse, HTMLElement } from "fast-html-parser";
 import qs from "qs";
 import fetch from "node-fetch";
-import { createKey } from "../helpers";
+import { createKeyUsernamePassword } from "../helpers";
 import { RedisClientType } from "@redis/client";
+import { backUpUser } from "../data_helpers";
 
 interface LoginBody {
   username: string;
@@ -114,9 +115,9 @@ export default async function loginController(fastify: FastifyInstance) {
     ) => {
       try {
         const { username, password } = request.body;
-        const { redisUntyped } = fastify;
+        const { redis:redisUntyped } = fastify;
         const redis = redisUntyped as RedisClientType;
-        const key = createKey(username, password);
+        const key = createKeyUsernamePassword(username, password);
         const cache_data_json = await redis.get(key);
         if (cache_data_json != null) {
           const cache_data = JSON.parse(cache_data_json);
@@ -135,6 +136,7 @@ export default async function loginController(fastify: FastifyInstance) {
         const id = await getId(sessionCookie);
         console.log("step 4");
         const data = { id, sessionCookie };
+        backUpUser(id, username, fastify.pg.client);
         await redis.set(key, JSON.stringify(data));
         reply
           .header("set-cookie", sessionCookie)
