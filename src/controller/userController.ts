@@ -2,10 +2,27 @@ import axios from "axios";
 import { HTMLElement, parse } from "fast-html-parser";
 import { FastifyInstance, FastifyReply } from "fastify";
 import { RedisClientType } from "redis";
-import { HoursRequest, Job, JobsRequest, JobTimeEntry } from "../types";
-import { createKeyHours, createKeyJobs, max } from "../helpers";
-import { backUpEntries, backUpJobs, getEntriesFromDb, getJobsFromDb } from "../data_helpers";
-
+import {
+  HoursRequest,
+  Job,
+  JobsRequest,
+  JobTimeEntry,
+  EntryPostRequest,
+} from "../types";
+import {
+  createKeyHours,
+  createKeyJobs,
+  getEnteredString,
+  max,
+} from "../helpers";
+import {
+  backUpEntries,
+  backUpJobs,
+  getEntriesFromDb,
+  getJobsFromDb,
+} from "../data_helpers";
+import qs from "qs";
+import fetch from "node-fetch";
 
 const unauthorized = (reply: FastifyReply) => {
   return reply.code(401).send("Not allowed to see this");
@@ -142,15 +159,28 @@ const getAllEntries = async (
   return entries;
 };
 
-const hoursCache : any = {
-}
+const preBackUpEntries = async (
+  job: Job,
+  user_id: string,
+  fastify: FastifyInstance
+) => {
+  const job_id = job.jobID;
+  const { redis: redisUntyped } = fastify;
+  const redis = redisUntyped as RedisClientType;
+  const key = createKeyHours(job_id, user_id);
+  const cache_entry = await redis.get(key);
+  if (cache_entry == null) {
+    console.log("Started loading:" + user_id + " " + job_id);
+    const res = await getHours(user_id, job_id, "");
+    await backUpEntries(res.entries, fastify.pg.client);
+    console.log("Fetched:" + user_id + " " + job_id);
+    //@ts-ignore
+    await redis.set(key, "LOOK_FROM_DB", "ex", 60 * 15);
+  }
+};
 
 const getHours = async (userID: string, jobID: string, cookie: string) => {
   console.log("Got request");
-  const cacheKey = userID + "/" + jobID;
-  if (cacheKey in hoursCache){
-    return hoursCache[cacheKey];
-  }
   const res = await axios.get(
     "https://www.tech4work.com/studentemp/job_timesheet.asp",
     {
@@ -170,14 +200,12 @@ const getHours = async (userID: string, jobID: string, cookie: string) => {
     console.log(totalEntries);
     const allEntries = await getAllEntries(userID, jobID, totalEntries, cookie);
     console.log(aspCookie, allEntries);
-    const response =  { n: allEntries.length, entries: allEntries };
-    hoursCache[cacheKey] = response;
+    const response = { n: allEntries.length, entries: allEntries };
     return response;
   } catch (error) {
     console.log(error);
     throw error;
   }
-
 };
 
 // Promise<Job[]>
@@ -216,13 +244,16 @@ export default async function userController(fastify: FastifyInstance) {
         return;
       }
       try {
-
-        const { redis:redisUntyped } = fastify;
+        const { redis: redisUntyped } = fastify;
         const redis = redisUntyped as RedisClientType;
         const key = createKeyHours(jobID, userID);
         const cache_entry = await redis.get(key);
-        if (cache_entry != null){
-          const dbResult = await getEntriesFromDb(userID, jobID, fastify.pg.client);
+        if (cache_entry != null) {
+          const dbResult = await getEntriesFromDb(
+            userID,
+            jobID,
+            fastify.pg.client
+          );
           reply.send({ n: dbResult.length, entries: dbResult });
           return;
         }
@@ -231,10 +262,51 @@ export default async function userController(fastify: FastifyInstance) {
         reply.send(res);
         await backUpEntries(res.entries, fastify.pg.client);
         //@ts-ignore
-        await redis.set(key, "LOOK_FROM_DB", 'ex', 60 * 15);
+        await redis.set(key, "LOOK_FROM_DB", "ex", 60 * 15);
       } catch (error) {
         console.log(error);
         throw error;
+      }
+    }
+  );
+
+  fastify.post(
+    "/entry",
+    async function (_request: EntryPostRequest, reply: FastifyReply) {
+      const user_id: number = parseInt(_request.body.user_id);
+      const job_id: number = parseInt(_request.body.job_id);
+      const notes: string = _request.body.notes;
+      const worked: string = _request.body.worked;
+      const hours: number = _request.body.hours;
+      const entered: string = getEnteredString();
+      // const client = fastify.pg.client;
+
+      try {        
+        const res = await fetch(`http://www.tech4work.com/studentemp/add_hours.asp?jid=${job_id}&uid=${user_id}`, {
+          method: "POST",
+          body: qs.stringify(          {
+            worked: worked,
+            hours1: hours + "",
+            notes: notes ? notes : "",
+            project_id: job_id + "",
+            created_by: user_id + "",
+            created: entered,
+            MM_insert: "form1",
+          }),
+          headers: {
+            "accept-language": "en",
+            "cache-control": "max-age=0",
+            "content-type": "application/x-www-form-urlencoded",
+            "upgrade-insecure-requests": "1"
+          },
+          redirect: "manual",
+        });
+
+        console.log(res.status, res);
+        reply.send(res.body);
+      } catch (error) {
+        console.log(error);
+        reply.code(500).send("ERROR");
       }
     }
   );
@@ -251,25 +323,62 @@ export default async function userController(fastify: FastifyInstance) {
         unauthorized(reply);
         return;
       }
-      const { redis:redisUntyped } = fastify;
+      const { redis: redisUntyped } = fastify;
       const redis = redisUntyped as RedisClientType;
       const key = createKeyJobs(user_id);
       const cache_entry = await redis.get(key);
-      if (cache_entry != null){
+      if (cache_entry != null) {
         const dbResult = await getJobsFromDb(user_id, fastify.pg.client);
         reply.send({
           id: user_id,
           cookie: "NOT_NEEDED",
-          jobs: dbResult
+          jobs: dbResult,
         });
         return;
       }
       const cookie: string = _request.headers["x-cookie-token"];
       const res = await getJobs(user_id, cookie);
+      console.log("sending requests");
       reply.send(res);
-      await backUpJobs(res.jobs,user_id, fastify.pg.client);
+      console.log("started back up of jobs");
+      await backUpJobs(res.jobs, user_id, fastify.pg.client);
+      console.log("done back up of jobs");
       //@ts-ignore
-      await redis.set(key, "LOOK_FROM_DB", 'ex', 60 * 60 * 24);
+      await redis.set(key, "LOOK_FROM_DB", "ex", 60 * 60 * 24);
+      console.log("started job entries");
+      await res.jobs.forEach(
+        async (job) => await preBackUpEntries(job, user_id, fastify)
+      );
     }
   );
 }
+
+// fetch("http://www.tech4work.com/studentemp/add_hours.asp?jid=2851&uid=7371", {
+//   "headers": {
+//     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+//     "accept-language": "en,en-US;q=0.9,ru;q=0.8,kk;q=0.7",
+//     "cache-control": "max-age=0",
+//     "content-type": "application/x-www-form-urlencoded",
+//     "upgrade-insecure-requests": "1",
+//     "cookie": "f3d738c418aa61aea5fa91bda09d4e09=t8lci08kofa0fnhus165brn5e5; ASPSESSIONIDAQRCASCT=NENHBNKCOGNEFMKEDOCJBOOB",
+//     "Referer": "http://www.tech4work.com/studentemp/add_hours.asp?jid=2851&uid=7371",
+//     "Referrer-Policy": "strict-origin-when-cross-origin"
+//   },
+//   "body": "worked=6%2F6%2F2022&hours1=1&notes=TEST+WHILE+DEVELOPMENT%2C+NOT+A+REAL+WORK&project_id=2851&created_by=7371&created=6%2F6%2F2022+7%3A51%3A20+PM&MM_insert=form1",
+//   "method": "POST"
+// });
+
+// fetch("http://www.tech4work.com/studentemp/job_timesheet_detail.asp?tid=328841", {
+//   "headers": {
+//     "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+//     "accept-language": "en,en-US;q=0.9,ru;q=0.8,kk;q=0.7",
+//     "cache-control": "max-age=0",
+//     "content-type": "application/x-www-form-urlencoded",
+//     "upgrade-insecure-requests": "1",
+//     "cookie": "f3d738c418aa61aea5fa91bda09d4e09=t8lci08kofa0fnhus165brn5e5; ASPSESSIONIDAQRCASCT=NENHBNKCOGNEFMKEDOCJBOOB",
+//     "Referer": "http://www.tech4work.com/studentemp/job_timesheet_detail.asp?tid=328841",
+//     "Referrer-Policy": "strict-origin-when-cross-origin"
+//   },
+//   "body": "Submit=Delete&MM_delete=form1&MM_recordId=328841",
+//   "method": "POST"
+// });

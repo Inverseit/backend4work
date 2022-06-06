@@ -5,3 +5,9 @@ export const createKeyUsernamePassword = (username: string, password: string ) =
 export const createKeyHours = (job_id: string, user_id: string ) => "Hours:" + user_id + "-" + job_id;
 
 export const createKeyJobs = (user_id: string ) => "Jobs:" + user_id;
+
+export const getEnteredString = () => {
+    const x = new Date()
+    x.setTime(x.getTime() + 3 * 60 * 60 * 1000);
+    return x.toLocaleString('en-US');
+}
