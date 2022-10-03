@@ -13,7 +13,7 @@
   "license": "MIT",
   "dependencies": {
     "@fastify/cors": "^7.0.0",
-    "@fastify/redis": "^5.0.0",
+    "@fastify/redis": "^6.0.1",
     "@types/fast-html-parser": "^1.0.2",
     "@types/node-fetch": "^2.6.1",
     "@types/pg": "^8.6.5",
