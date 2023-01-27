@@ -19,7 +19,7 @@
     "@types/pg": "^8.6.5",
     "@types/qs": "^6.9.7",
     "@types/redis": "^4.0.11",
-    "axios": "^0.27.0",
+    "axios": "^1.2.5",
     "fast-html-parser": "^1.0.1",
     "fastify": "^3.28.0",
     "node-fetch": "2",
